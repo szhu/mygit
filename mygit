@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+
+# This script allows you to quickly set up and use Git repos on a private server via SSH.
+# The server acts as the remote and holds bare repos, which the server and clients can 
+# easily clone into local working copy repos.
+
+# Configuration. Change these two things:
+
+# Where is the Git server?
+MYGIT_HOST='ee130-aw@hive21.cs.berkeley.edu'
+# Where are the bare repos located, relative to the home directory on the server?
+MYGIT_REMOTES='usr/git'
+# Right now mygit is designed to use repos relative to the home directory.
+# If you want it relative to root, you can easily hack this.
+
+MYGIT_SELF="`basename "$0"`"
+
+if [ -z "$1" ]
+then
+	echo "usage: $MYGIT_SELF command" ; exit 1
+else
+	CMD="$1"
+	shift
+	case "$CMD" in
+
+	setup)
+	# Sets up the directory for the bare repos. Run on server only.
+
+		echo mkdir -p ~/"$MYGIT_REMOTES"
+		mkdir -p ~/"$MYGIT_REMOTES"
+		;;
+
+	clone)
+	# Clones a bare repo into the current directory. Run on any machine.
+
+		if [ -z "$1" ]
+		then
+			echo "usage: $MYGIT_SELF $CMD reponame" ; exit 1
+		else
+			name="$1"
+			echo git clone ssh://"$MYGIT_HOST"/~/"$MYGIT_REMOTES/$name.git"
+			git clone ssh://"$MYGIT_HOST"/~/"$MYGIT_REMOTES/$name.git"
+			cd $1
+		fi
+		;;
+
+	init)
+	# Creates a new bare repo. Run on server only.
+
+		if [ -z "$1" ]
+		then
+			echo "usage: $MYGIT_SELF $CMD reponame" ; exit 1
+		else
+			name="$1"
+			cd ~/"$MYGIT_REMOTES"
+			mkdir -p "$name.git"
+			cd "$name.git"
+			git init --bare
+			git config core.sharedrepository 1
+			find objects -type d -exec chmod 02770 {} \;
+		fi
+		;;
+
+	ffonly)
+	# Modifies receive.denyNonFastforwards for an existing bare repo.
+	# Run on server only.
+
+		if [ -z "$2" ]
+		then
+			echo "usage: $MYGIT_SELF $CMD reponame true|false" ; exit 1
+		else
+			name="$1"
+			cd ~/"$MYGIT_REMOTES/$name.git" &&
+			echo git config receive.denyNonFastforwards "$2" &&
+			git config receive.denyNonFastforwards "$2"
+		fi
+		;;
+
+	push)
+	# Sets the correct remote origin (moving the current one aside if it exists) and
+	# pushes to origin/master. Assumes you're cd'd into a normal repo that was cloned
+	# from a bare repo of the same name on the server.
+
+		name=`basename "`pwd`"`
+		if [ -d ".git" ]; then
+			git remote rename origin original
+			git remote add origin ~/"$MYGIT_REMOTES/$name.git"
+		else
+			git init
+			git remote add origin ~/"$MYGIT_REMOTES/$name.git"
+			git add *
+			echo git status
+			git status
+			git commit -am "initial commit"
+		fi
+		git push -u origin master
+		;;
+
+	remove)
+	# Removes a remote. Run on server only.
+
+		if [ ! $# -eq 2 ]
+		then
+			echo "usage: $MYGIT_SELF $CMD -f reponame" ; exit 1
+		else
+			name="$2"
+			rm -r $1 ~/"$MYGIT_REMOTES/$name.git"
+		fi
+		;;
+
+	*)
+		echo "$MYGIT_SELF: invalid command"
+		exit 1
+		;;
+
+	esac
+fi
