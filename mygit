@@ -6,12 +6,11 @@
 
 # Configuration. Change these two things:
 
-# Where is the Git server?
-MYGIT_HOST='ee130-aw@hive21.cs.berkeley.edu'
-# Where are the bare repos located, relative to the home directory on the server?
-MYGIT_REMOTES='usr/git'
-# Right now mygit is designed to use repos relative to the home directory.
-# If you want it relative to root, you can easily hack this.
+# Where is the Git server? Leave blank for local.
+MYGIT_HOST='ssh://ee130-aw@hive21.cs.berkeley.edu/'
+# Where are the bare repos located?
+MYGIT_REMOTES_SERVER=~/'usr/git' # for server commands
+MYGIT_REMOTES_CLIENT='~/usr/git' # for client commands
 
 MYGIT_SELF="`basename "$0"`"
 
@@ -23,25 +22,14 @@ else
 	shift
 	case "$CMD" in
 
+
+	# SERVER COMMANDS
+
 	setup)
 	# Sets up the directory for the bare repos. Run on server only.
 
-		echo mkdir -p ~/"$MYGIT_REMOTES"
-		mkdir -p ~/"$MYGIT_REMOTES"
-		;;
-
-	clone)
-	# Clones a bare repo into the current directory. Run on any machine.
-
-		if [ -z "$1" ]
-		then
-			echo "usage: $MYGIT_SELF $CMD reponame" ; exit 1
-		else
-			name="$1"
-			echo git clone ssh://"$MYGIT_HOST"/~/"$MYGIT_REMOTES/$name.git"
-			git clone ssh://"$MYGIT_HOST"/~/"$MYGIT_REMOTES/$name.git"
-			cd $1
-		fi
+		echo mkdir -p "$MYGIT_REMOTES_SERVER"
+		mkdir -p "$MYGIT_REMOTES_SERVER"
 		;;
 
 	init)
@@ -52,7 +40,7 @@ else
 			echo "usage: $MYGIT_SELF $CMD reponame" ; exit 1
 		else
 			name="$1"
-			cd ~/"$MYGIT_REMOTES"
+			cd "$MYGIT_REMOTES_SERVER"
 			mkdir -p "$name.git"
 			cd "$name.git"
 			git init --bare
@@ -70,30 +58,10 @@ else
 			echo "usage: $MYGIT_SELF $CMD reponame true|false" ; exit 1
 		else
 			name="$1"
-			cd ~/"$MYGIT_REMOTES/$name.git" &&
+			cd "$MYGIT_REMOTES_SERVER/$name.git" &&
 			echo git config receive.denyNonFastforwards "$2" &&
 			git config receive.denyNonFastforwards "$2"
 		fi
-		;;
-
-	push)
-	# Sets the correct remote origin (moving the current one aside if it exists) and
-	# pushes to origin/master. Assumes you're cd'd into a normal repo that was cloned
-	# from a bare repo of the same name on the server.
-
-		name=`basename "`pwd`"`
-		if [ -d ".git" ]; then
-			git remote rename origin original
-			git remote add origin ~/"$MYGIT_REMOTES/$name.git"
-		else
-			git init
-			git remote add origin ~/"$MYGIT_REMOTES/$name.git"
-			git add *
-			echo git status
-			git status
-			git commit -am "initial commit"
-		fi
-		git push -u origin master
 		;;
 
 	remove)
@@ -104,8 +72,49 @@ else
 			echo "usage: $MYGIT_SELF $CMD -f reponame" ; exit 1
 		else
 			name="$2"
-			rm -r $1 ~/"$MYGIT_REMOTES/$name.git"
+			rm -r $1 "$MYGIT_REMOTES_SERVER/$name.git"
 		fi
+		;;
+
+
+	# CLIENT COMMANDS
+
+	clone)
+	# Clones a bare repo into the current directory. Run on any machine.
+
+		if [ -z "$1" ]
+		then
+			echo "usage: $MYGIT_SELF $CMD reponame" ; exit 1
+		else
+			name="$1"
+			localname=`basename "$name"`
+			echo git clone "$MYGIT_HOST$MYGIT_REMOTES_CLIENT/$name.git"
+			git clone "$MYGIT_HOST$MYGIT_REMOTES_CLIENT/$name.git" &&
+			cd "$localname" # this only works if the script is source'd
+		fi
+		;;
+
+	push)
+	# Sets the correct remote origin (moving the current one aside if it exists) and
+	# pushes to origin/master. Assumes you're cd'd into a normal repo that was cloned
+	# from a bare repo of the same name on the server. Run on any machine.
+
+		name=`basename "\`pwd\`"`
+		if [ -d ".git" ]; then
+			git remote rename origin original
+			git remote add origin "$MYGIT_REMOTES_CLIENT/$name.git"
+		else
+			git init
+			echo git remote add origin "$MYGIT_REMOTES_CLIENT/$name.git"
+			git remote add origin "$MYGIT_REMOTES_CLIENT/$name.git"
+			shopt -s dotglob
+			echo git add *
+			git add *
+			echo git status
+			git status
+			git commit -am "initial commit"
+		fi
+		git push -u origin master
 		;;
 
 	*)
